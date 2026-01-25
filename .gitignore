@@ -1,0 +1,7 @@
+.idea/
+.vscode/
+.settings/
+.buildpath/
+.project
+.DS_Store
+Thumbs.db

@@ -1,0 +1,24 @@
+{
+	"name": "kiri4tanker/k4t.docs",
+	"description": "Автоматическая документация Bitrix на Swagger",
+	"type": "bitrix-d7-module",
+	"keywords": [
+		"bitrix",
+		"swagger",
+		"docs",
+		"kiri4tanker"
+	],
+	"authors": [
+		{
+			"name": "Kirill Terentiev",
+			"email": "kiri4tankerofficial@gmail.com",
+			"role": "Author"
+		}
+	],
+	"require": {
+		"php": ">=8.2",
+		"composer/installers": "^1.0|^2.0",
+		"zircote/swagger-php": "^4.10"
+	},
+	"license": "MIT"
+}
