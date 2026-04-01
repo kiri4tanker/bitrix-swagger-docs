@@ -35,8 +35,8 @@
 		"phpstan/phpstan": "^1.12"
 	},
 	"support": {
-		"issues": "https://github.com/kiri4tanker/k4t.docs/issues",
-		"source": "https://github.com/kiri4tanker/k4t.docs"
+		"issues": "https://github.com/kiri4tanker/bitrix-swagger-docs/issues",
+		"source": "https://github.com/kiri4tanker/bitrix-swagger-docs"
 	},
 	"scripts": {
 		"test": "phpunit --configuration phpunit.xml",

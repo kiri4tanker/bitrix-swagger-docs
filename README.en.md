@@ -1,7 +1,7 @@
 # k4t.docs
 
 [![Packagist](https://img.shields.io/packagist/v/kiri4tanker/k4t.docs?logo=packagist&label=Packagist)](https://packagist.org/packages/kiri4tanker/k4t.docs)
-[![CI](https://github.com/kiri4tanker/k4t.docs/actions/workflows/ci.yml/badge.svg)](https://github.com/kiri4tanker/k4t.docs/actions/workflows/ci.yml)
+[![CI](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/ci.yml/badge.svg)](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/ci.yml)
 [![License](https://img.shields.io/packagist/l/kiri4tanker/k4t.docs)](https://packagist.org/packages/kiri4tanker/k4t.docs)
 
 Русская версия: [readme.md](readme.md)
