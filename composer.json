@@ -15,10 +15,38 @@
 			"role": "Author"
 		}
 	],
+	"autoload": {
+		"classmap": [
+			"lib/"
+		]
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"K4T\\Docs\\Tests\\": "tests/"
+		}
+	},
 	"require": {
 		"php": ">=8.2",
 		"composer/installers": "^1.0|^2.0",
 		"zircote/swagger-php": "^4.10"
+	},
+	"require-dev": {
+		"phpunit/phpunit": "^11.5",
+		"phpstan/phpstan": "^1.12"
+	},
+	"support": {
+		"issues": "https://github.com/kiri4tanker/k4t.docs/issues",
+		"source": "https://github.com/kiri4tanker/k4t.docs"
+	},
+	"scripts": {
+		"test": "phpunit --configuration phpunit.xml",
+		"stan": "phpstan analyse --configuration phpstan.neon --no-progress",
+		"lint": "find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l"
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/installers": true
+		}
 	},
 	"license": "MIT"
 }

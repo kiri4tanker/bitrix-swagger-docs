@@ -5,3 +5,9 @@
 .project
 .DS_Store
 Thumbs.db
+/vendor/
+.phpunit.result.cache
+.phpunit.cache/
+coverage/
+.phpstan.cache
+.php-cs-fixer.cache
