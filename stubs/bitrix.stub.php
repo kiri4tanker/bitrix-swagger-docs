@@ -39,6 +39,19 @@ namespace Bitrix\Main {
 
 		public function getManagedCache(): object {}
 	}
+
+	class ManagedCacheMock
+	{
+		public function read(int $ttl, string $key, string $table = ''): bool {}
+
+		public function get(string $key): mixed {}
+
+		public function set(string $key, mixed $value): void {}
+
+		public function clean(string $key, string $table = ''): bool {}
+
+		public function clear(): void {}
+	}
 }
 
 namespace Bitrix\Main\Diag {

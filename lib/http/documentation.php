@@ -22,7 +22,7 @@ class Documentation
 	 */
 	public static function scalar(HttpRequest $request): HttpResponse
 	{
-		$settings = self::safeLoadSettings();
+		$settings = self::safeLoadSettings($request);
 
 		$access = self::checkAccess($request, $settings);
 		if ($access !== null) {
@@ -46,13 +46,45 @@ HTML;
 				->setContent($html);
 
 			$response = self::applySecurityHeaders($response);
-			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'error', 0.0);
+			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'error', 0.0, 'OFF');
 
 			return $response;
 		}
 
 		$cacheStatus      = 'OFF';
 		$generationTimeMs = 0.0;
+		$resetStatus      = 'OFF';
+
+		if (self::isCacheResetRequested($request)) {
+			$token = self::extractQueryParam($request, 'cache_reset_token');
+			if (!SwaggerService::isCacheResetAllowed($token)) {
+				$response = (new HttpResponse())
+					->setStatus('403 Forbidden')
+					->setContent(self::renderErrorPage('Access denied', 'Cache reset is not allowed'));
+				$response = self::applySecurityHeaders($response);
+				self::applyDiagnosticHeaders($response, $settings, 'OFF', 'error', 0.0, 'DENIED');
+
+				return $response;
+			}
+
+			try {
+				$resetMeta   = SwaggerService::resetCache($request);
+				$resetStatus = $resetMeta['cache_status'];
+			} catch (Throwable $e) {
+				self::logError('OpenAPI cache reset failed in scalar()', [
+					'exception' => $e->getMessage(),
+				] + self::buildRequestContext($request));
+
+				$response = (new HttpResponse())
+					->setStatus('500 Internal Server Error')
+					->setContent(self::renderErrorPage('OpenAPI cache reset failed', $e->getMessage()));
+				$response = self::applySecurityHeaders($response);
+				self::applyDiagnosticHeaders($response, $settings, 'OFF', 'error', 0.0, 'ERROR');
+
+				return $response;
+			}
+		}
+
 		try {
 			$swaggerPayload   = SwaggerService::generateJson($request);
 			$swaggerJson      = $swaggerPayload['json'];
@@ -61,30 +93,14 @@ HTML;
 		} catch (Throwable $e) {
 			self::logError('OpenAPI generation failed in scalar()', [
 				'exception' => $e->getMessage(),
-			]);
-
-			$error = htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-			$html  = <<<HTML
-        <!doctype html>
-        <html>
-          <head>
-            <title>API Documentation Error</title>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1" />
-          </head>
-          <body>
-            <h1>OpenAPI generation failed</h1>
-            <p>{$error}</p>
-          </body>
-        </html>
-HTML;
+			] + self::buildRequestContext($request));
 
 			$response = (new HttpResponse())
 				->setStatus('500 Internal Server Error')
-				->setContent($html);
+				->setContent(self::renderErrorPage('OpenAPI generation failed', $e->getMessage()));
 
 			$response = self::applySecurityHeaders($response);
-			self::applyDiagnosticHeaders($response, $settings, $cacheStatus, 'error', $generationTimeMs);
+			self::applyDiagnosticHeaders($response, $settings, $cacheStatus, 'error', $generationTimeMs, $resetStatus);
 
 			return $response;
 		}
@@ -112,7 +128,7 @@ HTML;
 
 			$response = (new HttpResponse())->setContent($html);
 			$response = self::applySecurityHeaders($response);
-			self::applyDiagnosticHeaders($response, $settings, $cacheStatus, $source, $generationTimeMs);
+			self::applyDiagnosticHeaders($response, $settings, $cacheStatus, $source, $generationTimeMs, $resetStatus);
 
 			return $response;
 		}
@@ -138,7 +154,7 @@ HTML;
 
 		$response = (new HttpResponse())->setContent($html);
 		$response = self::applySecurityHeaders($response);
-		self::applyDiagnosticHeaders($response, $settings, $cacheStatus, $source, $generationTimeMs);
+		self::applyDiagnosticHeaders($response, $settings, $cacheStatus, $source, $generationTimeMs, $resetStatus);
 
 		return $response;
 	}
@@ -150,14 +166,42 @@ HTML;
 	 */
 	public static function json(HttpRequest $request): Json
 	{
-		$settings = self::safeLoadSettings();
+		$settings = self::safeLoadSettings($request);
 
 		$access = self::checkAccess($request, $settings);
 		if ($access !== null) {
-			$response = new Json(['error' => $access['message']], $access['status_code']);
-			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0);
+			$response = self::buildJsonResponse(['error' => $access['message']], $access['status_code']);
+			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0, 'OFF');
 
 			return $response;
+		}
+
+		$resetStatus = 'OFF';
+		if (self::isCacheResetRequested($request)) {
+			$token = self::extractQueryParam($request, 'cache_reset_token');
+			if (!SwaggerService::isCacheResetAllowed($token)) {
+				$response = self::buildJsonResponse(['error' => 'Cache reset is not allowed'], 403);
+				self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0, 'DENIED');
+
+				return $response;
+			}
+
+			try {
+				$resetMeta   = SwaggerService::resetCache($request);
+				$resetStatus = $resetMeta['cache_status'];
+			} catch (Throwable $e) {
+				self::logError('OpenAPI cache reset failed in json()', [
+					'exception' => $e->getMessage(),
+				] + self::buildRequestContext($request));
+
+				$response = self::buildJsonResponse([
+					'error'   => 'OpenAPI cache reset failed',
+					'message' => $e->getMessage(),
+				], 500);
+				self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0, 'ERROR');
+
+				return $response;
+			}
 		}
 
 		try {
@@ -167,26 +211,42 @@ HTML;
 				throw new \RuntimeException('OpenAPI JSON payload is not an object');
 			}
 
-			$response = new Json($data);
-			self::applyDiagnosticHeaders($response, $settings, $payload['cache_status'], 'json', $payload['generation_time_ms']);
+			$response = self::buildJsonResponse($data, 200);
+			self::applyDiagnosticHeaders($response, $settings, $payload['cache_status'], 'json', $payload['generation_time_ms'], $resetStatus);
 
 			return $response;
 		} catch (Throwable $e) {
 			self::logError('OpenAPI generation failed in json()', [
 				'exception' => $e->getMessage(),
-			]);
+			] + self::buildRequestContext($request));
 
-			$response = new Json([
+			$response = self::buildJsonResponse([
 				'error'   => 'OpenAPI generation failed',
 				'message' => $e->getMessage(),
 			], 500);
-			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0);
+			self::applyDiagnosticHeaders($response, $settings, 'OFF', 'json-error', 0.0, $resetStatus);
 
 			return $response;
 		}
 	}
 
 	/**
+	 * @param array<string, mixed> $data
+	 * @param int                  $statusCode
+	 *
+	 * @return Json
+	 */
+	private static function buildJsonResponse(array $data, int $statusCode): Json
+	{
+		$response = new Json($data, $statusCode);
+		self::setResponseStatus($response, $statusCode);
+
+		return $response;
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
 	 * @return array{
 	 *     enabled:bool,
 	 *     allowed_groups:list<int>,
@@ -201,17 +261,44 @@ HTML;
 	 *     include_modules:list<string>
 	 * }|null
 	 */
-	private static function safeLoadSettings(): ?array
+	private static function safeLoadSettings(HttpRequest $request): ?array
 	{
 		try {
 			return SwaggerService::getSettings();
 		} catch (Throwable $e) {
 			self::logError('Failed to load swagger settings', [
 				'exception' => $e->getMessage(),
-			]);
+			] + self::buildRequestContext($request));
 
 			return null;
 		}
+	}
+
+	/**
+	 * @param string $title
+	 * @param string $message
+	 *
+	 * @return string
+	 */
+	private static function renderErrorPage(string $title, string $message): string
+	{
+		$safeTitle   = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$safeMessage = htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+		return <<<HTML
+        <!doctype html>
+        <html>
+          <head>
+            <title>{$safeTitle}</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+          </head>
+          <body>
+            <h1>{$safeTitle}</h1>
+            <p>{$safeMessage}</p>
+          </body>
+        </html>
+HTML;
 	}
 
 	/**
@@ -420,11 +507,18 @@ HTML;
 	 * @param string $cacheStatus
 	 * @param string $source
 	 * @param float  $generationTimeMs
+	 * @param string $cacheResetStatus
 	 *
 	 * @return void
 	 */
-	private static function applyDiagnosticHeaders(object $response, ?array $settings, string $cacheStatus, string $source, float $generationTimeMs): void
-	{
+	private static function applyDiagnosticHeaders(
+		object $response,
+		?array $settings,
+		string $cacheStatus,
+		string $source,
+		float $generationTimeMs,
+		string $cacheResetStatus
+	): void {
 		if ($settings === null || $settings['debug_headers_enabled'] === false) {
 			return;
 		}
@@ -432,6 +526,86 @@ HTML;
 		self::setHeader($response, 'X-K4T-Docs-Cache', $cacheStatus);
 		self::setHeader($response, 'X-K4T-Docs-Source', $source);
 		self::setHeader($response, 'X-K4T-Docs-Gen-Time', sprintf('%.2fms', $generationTimeMs));
+		self::setHeader($response, 'X-K4T-Docs-Cache-Reset', $cacheResetStatus);
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return bool
+	 */
+	private static function isCacheResetRequested(HttpRequest $request): bool
+	{
+		$value = self::extractQueryParam($request, 'cache_reset');
+		if ($value === null) {
+			return false;
+		}
+
+		$value = strtolower(trim($value));
+
+		return in_array($value, ['1', 'true', 'yes', 'on'], true);
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 * @param string      $name
+	 *
+	 * @return string|null
+	 */
+	private static function extractQueryParam(HttpRequest $request, string $name): ?string
+	{
+		$query = parse_url(self::extractRequestUri($request), PHP_URL_QUERY);
+		if (!is_string($query) || $query === '') {
+			return null;
+		}
+
+		$params = [];
+		parse_str($query, $params);
+		if (!array_key_exists($name, $params)) {
+			return null;
+		}
+
+		$value = $params[$name];
+		if (is_scalar($value)) {
+			$normalized = trim((string)$value);
+
+			return $normalized === '' ? null : $normalized;
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return string
+	 */
+	private static function extractRequestUri(HttpRequest $request): string
+	{
+		$requestUri = '';
+		if (method_exists($request, 'getRequestUri')) {
+			$requestUri = (string)$request->getRequestUri();
+		}
+
+		if ($requestUri === '') {
+			$requestUri = (string)($_SERVER['REQUEST_URI'] ?? '/docs/');
+		}
+
+		return $requestUri;
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function buildRequestContext(HttpRequest $request): array
+	{
+		return [
+			'request_uri' => self::extractRequestUri($request),
+			'http_host'   => (string)$request->getHttpHost(),
+			'client_ip'   => (string)$request->getRemoteAddress(),
+		];
 	}
 
 	/**
@@ -458,6 +632,45 @@ HTML;
 		if (!headers_sent()) {
 			header($name . ': ' . $value, true);
 		}
+	}
+
+	/**
+	 * @param object $response
+	 * @param int    $statusCode
+	 *
+	 * @return void
+	 */
+	private static function setResponseStatus(object $response, int $statusCode): void
+	{
+		if (method_exists($response, 'setStatusCode')) {
+			$response->setStatusCode($statusCode);
+
+			return;
+		}
+
+		if (method_exists($response, 'setStatus')) {
+			$response->setStatus(self::mapStatusCodeToStatusText($statusCode));
+
+			return;
+		}
+
+		http_response_code($statusCode);
+	}
+
+	/**
+	 * @param int $statusCode
+	 *
+	 * @return string
+	 */
+	private static function mapStatusCodeToStatusText(int $statusCode): string
+	{
+		return match ($statusCode) {
+			200 => '200 OK',
+			403 => '403 Forbidden',
+			404 => '404 Not Found',
+			500 => '500 Internal Server Error',
+			default => (string)$statusCode,
+		};
 	}
 
 	/**

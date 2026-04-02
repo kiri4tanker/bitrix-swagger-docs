@@ -86,6 +86,22 @@ class DocumentationTest extends TestCase
 		$this->assertSame('OFF', $response->headers['X-K4T-Docs-Cache'] ?? null);
 		$this->assertSame('json-error', $response->headers['X-K4T-Docs-Source'] ?? null);
 		$this->assertArrayHasKey('X-K4T-Docs-Gen-Time', $response->headers);
+		$this->assertSame('OFF', $response->headers['X-K4T-Docs-Cache-Reset'] ?? null);
+	}
+
+	public function testJsonReturns403WhenCacheResetDenied(): void
+	{
+		Configuration::setValue('k4t.docs', 'swagger_settings', [
+			'enabled'               => true,
+			'cache_reset_enabled'   => true,
+			'cache_reset_token'     => 'secret',
+			'debug_headers_enabled' => true,
+		]);
+
+		$response = Documentation::json(new HttpRequest(false, 'example.com', '127.0.0.1', '/docs.json?cache_reset=1'));
+		$this->assertSame(403, $response->statusCode);
+		$this->assertSame('Cache reset is not allowed', $response->data['error']);
+		$this->assertSame('DENIED', $response->headers['X-K4T-Docs-Cache-Reset'] ?? null);
 	}
 }
 

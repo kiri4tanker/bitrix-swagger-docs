@@ -7,6 +7,7 @@ use Bitrix\Main\Config\Configuration;
 use Bitrix\Main\HttpRequest;
 use Bitrix\Main\Loader;
 use Bitrix\Main\ModuleManager;
+use InvalidArgumentException;
 use OpenApi\Annotations\OpenApi;
 use OpenApi\Attributes as OA;
 use OpenApi\Generator;
@@ -33,7 +34,7 @@ class SwaggerService
 	/**
 	 * @param HttpRequest $request
 	 *
-	 * @return array{json:string, cache_status:string, generation_time_ms:float}
+	 * @return array{json:string, cache_status:string, generation_time_ms:float, cache_id:string|null}
 	 */
 	public static function generateJson(HttpRequest $request): array
 	{
@@ -43,13 +44,80 @@ class SwaggerService
 			'json'               => $payload['json'],
 			'cache_status'       => $payload['cache_status'],
 			'generation_time_ms' => $payload['generation_time_ms'],
+			'cache_id'           => $payload['cache_id'],
+		];
+	}
+
+	/**
+	 * @param string|null $providedToken
+	 *
+	 * @return bool
+	 */
+	public static function isCacheResetAllowed(?string $providedToken = null): bool
+	{
+		$rawSettings = self::getRawSettings();
+		$enabled     = self::extractBoolOption($rawSettings, 'cache_reset_enabled', false);
+		if ($enabled === false) {
+			return false;
+		}
+
+		$configuredToken = self::extractStringOption($rawSettings, 'cache_reset_token', '');
+		if ($configuredToken === '') {
+			return true;
+		}
+
+		if (!is_string($providedToken) || $providedToken === '') {
+			return false;
+		}
+
+		return hash_equals($configuredToken, $providedToken);
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return array{cleared:bool, cache_id:string|null, cache_status:string}
+	 */
+	public static function resetCache(HttpRequest $request): array
+	{
+		$settings = self::getSettings();
+		$finder   = self::prepareFinder($settings);
+		if ($finder === []) {
+			throw new RuntimeException(
+				'No directories found for OpenAPI scan. Check swagger_settings.include_dirs/include_modules in .settings.php.'
+			);
+		}
+
+		$cacheId = self::buildCacheId($request, $settings, $finder);
+		$cache   = self::resolveManagedCache($settings);
+		if ($cache === null) {
+			return [
+				'cleared'      => false,
+				'cache_id'     => $cacheId,
+				'cache_status' => 'OFF',
+			];
+		}
+
+		$cleared = false;
+		if (method_exists($cache, 'clean')) {
+			$result = $cache->clean($cacheId, self::MODULE_ID);
+			$cleared = $result === null ? true : (bool)$result;
+		} elseif (method_exists($cache, 'clear')) {
+			$cache->clear();
+			$cleared = true;
+		}
+
+		return [
+			'cleared'      => $cleared,
+			'cache_id'     => $cacheId,
+			'cache_status' => $cleared ? 'RESET' : 'MISS',
 		];
 	}
 
 	/**
 	 * @param HttpRequest $request
 	 *
-	 * @return array{openapi:OpenApi, json:string, cache_status:string, generation_time_ms:float}
+	 * @return array{openapi:OpenApi, json:string, cache_status:string, generation_time_ms:float, cache_id:string|null}
 	 */
 	private static function generatePayload(HttpRequest $request): array
 	{
@@ -63,9 +131,9 @@ class SwaggerService
 			);
 		}
 
-		$cache = self::resolveManagedCache($settings);
+		$cacheId = self::buildCacheId($request, $settings, $finder);
+		$cache   = self::resolveManagedCache($settings);
 		if ($cache !== null) {
-			$cacheId     = self::buildCacheId($request, $settings, $finder);
 			$cachedJson  = self::loadFromCache($cache, $cacheId, $settings);
 			$cachedModel = self::deserializeOpenApi($cachedJson);
 
@@ -75,6 +143,7 @@ class SwaggerService
 					'json'               => $cachedJson,
 					'cache_status'       => 'HIT',
 					'generation_time_ms' => self::toMilliseconds($startedAt),
+					'cache_id'           => $cacheId,
 				];
 			}
 		}
@@ -84,7 +153,6 @@ class SwaggerService
 		$json             = $openApi->toJson();
 
 		if ($cache !== null) {
-			$cacheId = self::buildCacheId($request, $settings, $finder);
 			self::saveToCache($cache, $cacheId, $json);
 		}
 
@@ -93,6 +161,7 @@ class SwaggerService
 			'json'               => $json,
 			'cache_status'       => $cache === null ? 'OFF' : 'MISS',
 			'generation_time_ms' => self::toMilliseconds($startedAt),
+			'cache_id'           => $cacheId,
 		];
 	}
 
@@ -113,9 +182,60 @@ class SwaggerService
 	 */
 	public static function getSettings(): array
 	{
-		$rawSettings = Configuration::getInstance(self::MODULE_ID)->get('swagger_settings') ?? [];
+		$rawSettings = self::getRawSettings();
+		unset($rawSettings['cache_reset_enabled'], $rawSettings['cache_reset_token']);
 
 		return SwaggerSettings::normalize($rawSettings);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private static function getRawSettings(): array
+	{
+		$rawSettings = Configuration::getInstance(self::MODULE_ID)->get('swagger_settings') ?? [];
+
+		return is_array($rawSettings) ? $rawSettings : [];
+	}
+
+	/**
+	 * @param array<string, mixed> $settings
+	 * @param string               $key
+	 * @param bool                 $default
+	 *
+	 * @return bool
+	 */
+	private static function extractBoolOption(array $settings, string $key, bool $default): bool
+	{
+		if (!array_key_exists($key, $settings)) {
+			return $default;
+		}
+
+		if (!is_bool($settings[$key])) {
+			throw new InvalidArgumentException(sprintf('swagger_settings.%s must be a boolean', $key));
+		}
+
+		return $settings[$key];
+	}
+
+	/**
+	 * @param array<string, mixed> $settings
+	 * @param string               $key
+	 * @param string               $default
+	 *
+	 * @return string
+	 */
+	private static function extractStringOption(array $settings, string $key, string $default): string
+	{
+		if (!array_key_exists($key, $settings)) {
+			return $default;
+		}
+
+		if (!is_scalar($settings[$key])) {
+			throw new InvalidArgumentException(sprintf('swagger_settings.%s must be a scalar', $key));
+		}
+
+		return trim((string)$settings[$key]);
 	}
 
 	/**

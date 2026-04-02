@@ -9,6 +9,8 @@ return [
 			'cache_enabled'   => true,
 			'cache_ttl'       => 3600,
 			'cache_revision'  => '1',
+			'cache_reset_enabled' => false,
+			'cache_reset_token'   => '',
 			'debug_headers_enabled' => false,
 			'servers'         => [
 				[

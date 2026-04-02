@@ -175,6 +175,17 @@ namespace Bitrix\Main {
 				];
 			}
 
+			public function clean(string $key, string $table = ''): bool
+			{
+				if (!isset($this->store[$key])) {
+					return false;
+				}
+
+				unset($this->store[$key]);
+
+				return true;
+			}
+
 			public function clear(): void
 			{
 				$this->store = [];

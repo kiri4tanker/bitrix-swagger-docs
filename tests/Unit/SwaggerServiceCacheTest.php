@@ -125,6 +125,43 @@ class SwaggerServiceCacheTest extends TestCase
 		$this->assertContains($moduleRoot . '/tests', $finder);
 	}
 
+	public function testResetCacheInvalidatesCache(): void
+	{
+		$moduleId = 'test.api';
+		$this->createFixtureModule($moduleId);
+		$this->setSwaggerSettings([
+			'include_modules'      => [$moduleId],
+			'include_dirs'         => ['routes'],
+			'cache_enabled'        => true,
+			'cache_ttl'            => 3600,
+			'cache_reset_enabled'  => true,
+			'cache_reset_token'    => 'secret',
+		]);
+
+		$request = new HttpRequest(false, 'example.com', '127.0.0.1', '/api/docs.json');
+
+		$this->assertSame('MISS', SwaggerService::generateJson($request)['cache_status']);
+		$this->assertSame('HIT', SwaggerService::generateJson($request)['cache_status']);
+
+		$reset = SwaggerService::resetCache($request);
+		$this->assertTrue($reset['cleared']);
+		$this->assertSame('RESET', $reset['cache_status']);
+
+		$this->assertSame('MISS', SwaggerService::generateJson($request)['cache_status']);
+	}
+
+	public function testCacheResetTokenValidation(): void
+	{
+		$this->setSwaggerSettings([
+			'cache_reset_enabled' => true,
+			'cache_reset_token'   => 'secret',
+		]);
+
+		$this->assertFalse(SwaggerService::isCacheResetAllowed(null));
+		$this->assertFalse(SwaggerService::isCacheResetAllowed('wrong'));
+		$this->assertTrue(SwaggerService::isCacheResetAllowed('secret'));
+	}
+
 	private function setSwaggerSettings(array $settings): void
 	{
 		$base = [
@@ -134,6 +171,8 @@ class SwaggerServiceCacheTest extends TestCase
 			'cache_enabled'         => true,
 			'cache_ttl'             => 3600,
 			'cache_revision'        => '1',
+			'cache_reset_enabled'   => false,
+			'cache_reset_token'     => '',
 			'debug_headers_enabled' => false,
 			'servers'               => [],
 			'include_dirs'          => ['routes'],
