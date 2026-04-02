@@ -109,6 +109,8 @@ return [
 			'allowed_ips' => [],
 			'cache_enabled' => true,
 			'cache_ttl' => 3600,
+			'cache_revision' => '1',
+			'debug_headers_enabled' => false,
 			'servers' => [
 				[
 					'url' => '/api/v1',
@@ -138,8 +140,10 @@ return [
 | `allowed_ips`     | `string[]` | `[]`               | Разрешенные IP/CIDR, например `127.0.0.1`, `10.0.0.0/8`.                     |
 | `cache_enabled`   | `bool`     | `true`             | Включает Managed Cache для готовой OpenAPI схемы.                            |
 | `cache_ttl`       | `int`      | `3600`             | TTL кэша в секундах. `0` = без TTL-ограничения (по механике Bitrix cache).   |
+| `cache_revision`  | `string`   | `'1'`              | Ревизия кэша. Измените значение для принудительного сброса ключа кэша.        |
+| `debug_headers_enabled` | `bool` | `false`          | Включает диагностические заголовки `X-K4T-Docs-*` в ответах docs/json.        |
 | `servers`         | `array[]`  | `[]`               | Список серверов OpenAPI. Если пусто, сервер вычисляется из текущего запроса. |
-| `include_dirs`    | `string[]` | `['lib','routes']` | Каталоги внутри каждого модуля для сканирования.                             |
+| `include_dirs`    | `string[]` | `[]`               | Каталоги внутри каждого модуля для сканирования. Пусто = все каталоги.       |
 | `exclude_dirs`    | `string[]` | `[]`               | Каталоги, которые исключаются из `include_dirs`.                             |
 | `include_modules` | `string[]` | `[]`               | Whitelist модулей. Если пусто - сканируются все установленные.               |
 
@@ -158,17 +162,20 @@ return [
 
 ## Кэширование (Managed Cache Bitrix)
 
-Модуль сохраняет собранный OpenAPI объект в Managed Cache и переиспользует его до истечения `cache_ttl`.
+Модуль сохраняет сгенерированный OpenAPI JSON в Managed Cache и переиспользует его до истечения `cache_ttl`.
 
 Ключ кэша строится из:
 
 - найденных путей для сканирования
 - конфигурации `servers`
 - `include_dirs`/`exclude_dirs`/`include_modules`
+- `cache_revision`
+- версии модуля (`install/version.php`)
 
 Практически это означает:
 
 - меняете конфиг сканирования -> формируется новый кэш-ключ
+- меняете `cache_revision` -> формируется новый кэш-ключ (принудительный сброс)
 - неизменный конфиг + активный TTL -> документация отдается из кэша
 
 Обычно файлы кэша Bitrix лежат в `bitrix/cache` и/или `bitrix/managed_cache` (зависит от конфигурации проекта).
@@ -201,6 +208,12 @@ return [
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: no-referrer`
 - `X-Frame-Options: SAMEORIGIN`
+
+При `debug_headers_enabled=true` дополнительно отдаются диагностические заголовки:
+
+- `X-K4T-Docs-Cache: HIT|MISS|OFF`
+- `X-K4T-Docs-Source: data-url|inline|json|...`
+- `X-K4T-Docs-Gen-Time: <ms>`
 
 CSP настроен с акцентом на self-hosted сценарий:
 

@@ -104,6 +104,8 @@ return [
 			'allowed_ips' => [],
 			'cache_enabled' => true,
 			'cache_ttl' => 3600,
+			'cache_revision' => '1',
+			'debug_headers_enabled' => false,
 			'servers' => [
 				[
 					'url' => '/api/v1',
@@ -136,8 +138,10 @@ return [
 | `allowed_ips` | `string[]` | `[]` | Allowed IP/CIDR values like `127.0.0.1`, `10.0.0.0/8`. |
 | `cache_enabled` | `bool` | `true` | Enables Managed Cache for generated OpenAPI. |
 | `cache_ttl` | `int` | `3600` | Cache TTL in seconds. `0` means no TTL limit (Bitrix cache behavior). |
+| `cache_revision` | `string` | `'1'` | Cache revision. Change it to force cache key reset. |
+| `debug_headers_enabled` | `bool` | `false` | Enables diagnostic `X-K4T-Docs-*` response headers. |
 | `servers` | `array[]` | `[]` | OpenAPI servers list. If empty, server is auto-detected from request. |
-| `include_dirs` | `string[]` | `['lib','routes']` | Per-module directories to scan. |
+| `include_dirs` | `string[]` | `[]` | Per-module directories to scan. Empty means all top-level dirs. |
 | `exclude_dirs` | `string[]` | `[]` | Directories excluded from `include_dirs`. |
 | `include_modules` | `string[]` | `[]` | Module whitelist. Empty means all installed modules. |
 
@@ -155,15 +159,18 @@ Otherwise `403`.
 
 ## Caching (Bitrix Managed Cache)
 
-OpenAPI result is cached and reused until `cache_ttl` expires.
+Generated OpenAPI JSON is cached and reused until `cache_ttl` expires.
 
 Cache key includes:
 - found scan paths
 - `servers` config
 - `include_dirs`/`exclude_dirs`/`include_modules`
+- `cache_revision`
+- module version (`install/version.php`)
 
 In practice:
 - config changes -> new cache key
+- changing `cache_revision` -> new cache key (forced reset)
 - same config + valid TTL -> served from cache
 
 Bitrix cache files are typically in `bitrix/cache` and/or `bitrix/managed_cache` (depends on your setup).
@@ -192,6 +199,11 @@ For `/docs/`, module sets:
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: no-referrer`
 - `X-Frame-Options: SAMEORIGIN`
+
+With `debug_headers_enabled=true`, module also returns:
+- `X-K4T-Docs-Cache: HIT|MISS|OFF`
+- `X-K4T-Docs-Source: data-url|inline|json|...`
+- `X-K4T-Docs-Gen-Time: <ms>`
 
 CSP is self-hosted oriented:
 - `script-src 'self'`
