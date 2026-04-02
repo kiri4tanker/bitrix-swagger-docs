@@ -49,5 +49,20 @@
 			"composer/installers": true
 		}
 	},
+	"archive": {
+		"exclude": [
+			"/.github/",
+			"/tests/",
+			"/stubs/",
+			"/.idea/",
+			"/.vscode/",
+			"/.phpunit.result.cache",
+			"/phpunit.xml",
+			"/phpstan.neon",
+			"/CHANGELOG.md",
+			"/CONTRIBUTING.md",
+			"/SECURITY.md"
+		]
+	},
 	"license": "MIT"
 }

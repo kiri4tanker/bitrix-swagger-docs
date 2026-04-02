@@ -2,7 +2,6 @@
 
 [![Packagist](https://img.shields.io/packagist/v/kiri4tanker/k4t.docs?logo=packagist&label=Packagist)](https://packagist.org/packages/kiri4tanker/k4t.docs)
 [![CI](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/ci.yml/badge.svg)](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/codeql.yml/badge.svg)](https://github.com/kiri4tanker/bitrix-swagger-docs/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/packagist/l/kiri4tanker/k4t.docs)](https://packagist.org/packages/kiri4tanker/k4t.docs)
 [![Security Policy](https://img.shields.io/badge/security-policy-brightgreen)](SECURITY.md)
 
