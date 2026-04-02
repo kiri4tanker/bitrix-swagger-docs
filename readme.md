@@ -116,6 +116,8 @@ return [
 			'cache_enabled' => true,
 			'cache_ttl' => 3600,
 			'cache_revision' => '1',
+			'cache_reset_enabled' => false,
+			'cache_reset_token' => '',
 			'debug_headers_enabled' => false,
 			'servers' => [
 				[
@@ -147,6 +149,8 @@ return [
 | `cache_enabled`   | `bool`     | `true`             | Включает Managed Cache для готовой OpenAPI схемы.                            |
 | `cache_ttl`       | `int`      | `3600`             | TTL кэша в секундах. `0` = без TTL-ограничения (по механике Bitrix cache).   |
 | `cache_revision`  | `string`   | `'1'`              | Ревизия кэша. Измените значение для принудительного сброса ключа кэша.        |
+| `cache_reset_enabled` | `bool` | `false`            | Разрешает ручной сброс кэша через query-параметр `cache_reset=1`.             |
+| `cache_reset_token` | `string` | `''`               | Токен для сброса кэша. Если задан, нужен `cache_reset_token=<token>`.         |
 | `debug_headers_enabled` | `bool` | `false`          | Включает диагностические заголовки `X-K4T-Docs-*` в ответах docs/json.        |
 | `servers`         | `array[]`  | `[]`               | Список серверов OpenAPI. Если пусто, сервер вычисляется из текущего запроса. |
 | `include_dirs`    | `string[]` | `[]`               | Каталоги внутри каждого модуля для сканирования. Пусто = все каталоги.       |
@@ -220,6 +224,17 @@ return [
 - `X-K4T-Docs-Cache: HIT|MISS|OFF`
 - `X-K4T-Docs-Source: data-url|inline|json|...`
 - `X-K4T-Docs-Gen-Time: <ms>`
+- `X-K4T-Docs-Cache-Reset: OFF|RESET|DENIED|ERROR`
+
+## Ручной сброс кэша
+
+Для принудительного сброса текущего cache-key:
+
+- `/docs.json?cache_reset=1`
+
+Если задан `cache_reset_token`, нужен токен:
+
+- `/docs.json?cache_reset=1&cache_reset_token=YOUR_TOKEN`
 
 CSP настроен с акцентом на self-hosted сценарий:
 

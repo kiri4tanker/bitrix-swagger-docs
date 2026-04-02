@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-04-02
+
+### Added
+- Optional cache reset flow via request parameters:
+  - `cache_reset=1`
+  - `cache_reset_token=<token>` (when token is configured)
+- Extended diagnostic headers:
+  - `X-K4T-Docs-Cache-Reset`
+- Additional tests for cache reset scenarios and settings validation errors.
+
+### Changed
+- Error logs now include request context (`request_uri`, `http_host`, `client_ip`).
+
 ## [1.1.1] - 2026-04-02
 
 ### Changed

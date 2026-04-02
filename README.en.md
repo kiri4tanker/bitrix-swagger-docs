@@ -111,6 +111,8 @@ return [
 			'cache_enabled' => true,
 			'cache_ttl' => 3600,
 			'cache_revision' => '1',
+			'cache_reset_enabled' => false,
+			'cache_reset_token' => '',
 			'debug_headers_enabled' => false,
 			'servers' => [
 				[
@@ -145,6 +147,8 @@ return [
 | `cache_enabled` | `bool` | `true` | Enables Managed Cache for generated OpenAPI. |
 | `cache_ttl` | `int` | `3600` | Cache TTL in seconds. `0` means no TTL limit (Bitrix cache behavior). |
 | `cache_revision` | `string` | `'1'` | Cache revision. Change it to force cache key reset. |
+| `cache_reset_enabled` | `bool` | `false` | Allows manual cache reset via query parameter `cache_reset=1`. |
+| `cache_reset_token` | `string` | `''` | Optional token for cache reset endpoint (`cache_reset_token=<token>`). |
 | `debug_headers_enabled` | `bool` | `false` | Enables diagnostic `X-K4T-Docs-*` response headers. |
 | `servers` | `array[]` | `[]` | OpenAPI servers list. If empty, server is auto-detected from request. |
 | `include_dirs` | `string[]` | `[]` | Per-module directories to scan. Empty means all top-level dirs. |
@@ -210,6 +214,17 @@ With `debug_headers_enabled=true`, module also returns:
 - `X-K4T-Docs-Cache: HIT|MISS|OFF`
 - `X-K4T-Docs-Source: data-url|inline|json|...`
 - `X-K4T-Docs-Gen-Time: <ms>`
+- `X-K4T-Docs-Cache-Reset: OFF|RESET|DENIED|ERROR`
+
+## Manual Cache Reset
+
+To force reset current cache key:
+
+- `/docs.json?cache_reset=1`
+
+If `cache_reset_token` is configured, provide token:
+
+- `/docs.json?cache_reset=1&cache_reset_token=YOUR_TOKEN`
 
 CSP is self-hosted oriented:
 - `script-src 'self'`
