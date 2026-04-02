@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-04-02
+
+### Changed
+- Removed failing `CodeQL` workflow to keep CI checks stable.
+- Tuned Dependabot rules to ignore disruptive major updates for selected dependencies.
+- Added package archive exclusions (`.gitattributes` and `composer.json archive.exclude`) to keep distribution focused on runtime module files.
+
 ## [1.1.0] - 2026-04-02
 
 ### Added
