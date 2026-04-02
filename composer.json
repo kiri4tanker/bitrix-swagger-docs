@@ -35,6 +35,7 @@
 		"phpstan/phpstan": "^1.12"
 	},
 	"support": {
+		"docs": "https://github.com/kiri4tanker/bitrix-swagger-docs/blob/main/readme.md",
 		"issues": "https://github.com/kiri4tanker/bitrix-swagger-docs/issues",
 		"source": "https://github.com/kiri4tanker/bitrix-swagger-docs"
 	},
