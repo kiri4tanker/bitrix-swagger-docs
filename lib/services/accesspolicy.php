@@ -11,6 +11,8 @@ final class AccessPolicy
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,

@@ -3,6 +3,8 @@
 namespace Bitrix\Main {
 	class HttpRequest
 	{
+		public function getRequestUri(): string {}
+
 		public function isHttps(): bool {}
 
 		public function getHttpHost(): string {}
@@ -12,6 +14,10 @@ namespace Bitrix\Main {
 
 	class HttpResponse
 	{
+		public function addHeader(string $name, string $value): self {}
+
+		public function setHeader(string $name, string $value): self {}
+
 		public function setContent(string $content): self {}
 
 		public function setStatus(string $status): self {}
@@ -32,6 +38,13 @@ namespace Bitrix\Main {
 		public static function getInstance(): self {}
 
 		public function getManagedCache(): object {}
+	}
+}
+
+namespace Bitrix\Main\Diag {
+	class Debug
+	{
+		public static function writeToFile(mixed $var, string $text = '', string $file = ''): void {}
 	}
 }
 

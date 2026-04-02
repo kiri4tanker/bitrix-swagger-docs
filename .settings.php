@@ -8,6 +8,8 @@ return [
 			'allowed_ips'     => [],
 			'cache_enabled'   => true,
 			'cache_ttl'       => 3600,
+			'cache_revision'  => '1',
+			'debug_headers_enabled' => false,
 			'servers'         => [
 				[
 					'url'         => '/api/v1',

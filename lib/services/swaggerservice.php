@@ -8,8 +8,9 @@ use Bitrix\Main\HttpRequest;
 use Bitrix\Main\Loader;
 use Bitrix\Main\ModuleManager;
 use OpenApi\Annotations\OpenApi;
-use OpenApi\Generator;
 use OpenApi\Attributes as OA;
+use OpenApi\Generator;
+use OpenApi\Serializer;
 use RuntimeException;
 use Throwable;
 
@@ -24,7 +25,36 @@ class SwaggerService
 	 */
 	public static function generate(HttpRequest $request): OpenApi
 	{
-		$settings = self::getSettings();
+		$payload = self::generatePayload($request);
+
+		return $payload['openapi'];
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return array{json:string, cache_status:string, generation_time_ms:float}
+	 */
+	public static function generateJson(HttpRequest $request): array
+	{
+		$payload = self::generatePayload($request);
+
+		return [
+			'json'               => $payload['json'],
+			'cache_status'       => $payload['cache_status'],
+			'generation_time_ms' => $payload['generation_time_ms'],
+		];
+	}
+
+	/**
+	 * @param HttpRequest $request
+	 *
+	 * @return array{openapi:OpenApi, json:string, cache_status:string, generation_time_ms:float}
+	 */
+	private static function generatePayload(HttpRequest $request): array
+	{
+		$startedAt = microtime(true);
+		$settings  = self::getSettings();
 
 		$finder = self::prepareFinder($settings);
 		if ($finder === []) {
@@ -33,17 +63,37 @@ class SwaggerService
 			);
 		}
 
-		$cacheId = self::buildCacheId($request, $settings, $finder);
-		$cached  = self::loadFromCache($cacheId, $settings);
-		if ($cached instanceof OpenApi) {
-			return $cached;
+		$cache = self::resolveManagedCache($settings);
+		if ($cache !== null) {
+			$cacheId     = self::buildCacheId($request, $settings, $finder);
+			$cachedJson  = self::loadFromCache($cache, $cacheId, $settings);
+			$cachedModel = self::deserializeOpenApi($cachedJson);
+
+			if ($cachedModel !== null && is_string($cachedJson)) {
+				return [
+					'openapi'            => $cachedModel,
+					'json'               => $cachedJson,
+					'cache_status'       => 'HIT',
+					'generation_time_ms' => self::toMilliseconds($startedAt),
+				];
+			}
 		}
 
-		$swagger          = Generator::scan($finder);
-		$swagger->servers = self::getServers($request, $settings['servers']);
-		self::saveToCache($cacheId, $swagger, $settings);
+		$openApi          = Generator::scan($finder);
+		$openApi->servers = self::getServers($request, $settings['servers']);
+		$json             = $openApi->toJson();
 
-		return $swagger;
+		if ($cache !== null) {
+			$cacheId = self::buildCacheId($request, $settings, $finder);
+			self::saveToCache($cache, $cacheId, $json);
+		}
+
+		return [
+			'openapi'            => $openApi,
+			'json'               => $json,
+			'cache_status'       => $cache === null ? 'OFF' : 'MISS',
+			'generation_time_ms' => self::toMilliseconds($startedAt),
+		];
 	}
 
 	/**
@@ -53,6 +103,8 @@ class SwaggerService
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,
@@ -73,6 +125,8 @@ class SwaggerService
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,
@@ -124,7 +178,6 @@ class SwaggerService
 				}
 
 				$dir = sprintf('%s/%s', $moduleRoot, $includeDir);
-
 				if (is_dir($dir)) {
 					$foundPaths[] = $dir;
 				}
@@ -144,7 +197,7 @@ class SwaggerService
 	{
 		$servers = [];
 
-		if (empty($config)) {
+		if ($config === []) {
 			$protocol  = $request->isHttps() ? 'https' : 'http';
 			$servers[] = new OA\Server(
 				url: $protocol . '://' . $request->getHttpHost() . '/api/v1',
@@ -157,7 +210,7 @@ class SwaggerService
 		foreach ($config as $server) {
 			$servers[] = new OA\Server(
 				url: $server['url'],
-				description: $server['description'] ?? null
+				description: $server['description']
 			);
 		}
 
@@ -165,18 +218,20 @@ class SwaggerService
 	}
 
 	/**
-	 * @param HttpRequest  $request
+	 * @param HttpRequest $request
 	 * @param array{
 	 *     enabled:bool,
 	 *     allowed_groups:list<int>,
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,
 	 *     include_modules:list<string>
-	 * }                   $settings
+	 * } $settings
 	 * @param list<string> $finder
 	 *
 	 * @return string
@@ -200,6 +255,8 @@ class SwaggerService
 			'include_dirs'    => $settings['include_dirs'],
 			'exclude_dirs'    => $settings['exclude_dirs'],
 			'include_modules' => $settings['include_modules'],
+			'cache_revision'  => $settings['cache_revision'],
+			'module_version'  => self::getModuleVersion(),
 		];
 
 		$encodedPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -211,6 +268,33 @@ class SwaggerService
 	}
 
 	/**
+	 * @param array{
+	 *     enabled:bool,
+	 *     allowed_groups:list<int>,
+	 *     allowed_ips:list<string>,
+	 *     cache_enabled:bool,
+	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
+	 *     servers:list<array{url:string, description:string|null}>,
+	 *     include_dirs:list<string>,
+	 *     exclude_dirs:list<string>,
+	 *     include_modules:list<string>
+	 * } $settings
+	 *
+	 * @return object|null
+	 */
+	private static function resolveManagedCache(array $settings): ?object
+	{
+		if ($settings['cache_enabled'] === false) {
+			return null;
+		}
+
+		return self::getManagedCache();
+	}
+
+	/**
+	 * @param object $cache
 	 * @param string $cacheId
 	 * @param array{
 	 *     enabled:bool,
@@ -218,25 +302,18 @@ class SwaggerService
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,
 	 *     include_modules:list<string>
-	 * }             $settings
+	 * } $settings
 	 *
-	 * @return OpenApi|null
+	 * @return string|null
 	 */
-	private static function loadFromCache(string $cacheId, array $settings): ?OpenApi
+	private static function loadFromCache(object $cache, string $cacheId, array $settings): ?string
 	{
-		if ($settings['cache_enabled'] === false) {
-			return null;
-		}
-
-		$cache = self::getManagedCache();
-		if ($cache === null) {
-			return null;
-		}
-
 		$cacheTtl = $settings['cache_ttl'];
 		if ($cache->read($cacheTtl, $cacheId, self::MODULE_ID) !== true) {
 			return null;
@@ -244,38 +321,81 @@ class SwaggerService
 
 		$cached = $cache->get($cacheId);
 
-		return $cached instanceof OpenApi ? $cached : null;
+		return is_string($cached) ? $cached : null;
 	}
 
 	/**
-	 * @param string  $cacheId
-	 * @param OpenApi $swagger
-	 * @param array{
-	 *     enabled:bool,
-	 *     allowed_groups:list<int>,
-	 *     allowed_ips:list<string>,
-	 *     cache_enabled:bool,
-	 *     cache_ttl:int,
-	 *     servers:list<array{url:string, description:string|null}>,
-	 *     include_dirs:list<string>,
-	 *     exclude_dirs:list<string>,
-	 *     include_modules:list<string>
-	 * }              $settings
+	 * @param object $cache
+	 * @param string $cacheId
+	 * @param string $json
 	 *
 	 * @return void
 	 */
-	private static function saveToCache(string $cacheId, OpenApi $swagger, array $settings): void
+	private static function saveToCache(object $cache, string $cacheId, string $json): void
 	{
-		if ($settings['cache_enabled'] === false) {
-			return;
+		$cache->set($cacheId, $json);
+	}
+
+	/**
+	 * @param string|null $json
+	 *
+	 * @return OpenApi|null
+	 */
+	private static function deserializeOpenApi(?string $json): ?OpenApi
+	{
+		if ($json === null || $json === '') {
+			return null;
 		}
 
-		$cache = self::getManagedCache();
-		if ($cache === null) {
-			return;
+		try {
+			$annotation = (new Serializer())->deserialize($json, OpenApi::class);
+		} catch (Throwable) {
+			return null;
 		}
 
-		$cache->set($cacheId, $swagger);
+		return $annotation instanceof OpenApi ? $annotation : null;
+	}
+
+	/**
+	 * @return string
+	 */
+	private static function getModuleVersion(): string
+	{
+		static $version = null;
+
+		if (is_string($version) && $version !== '') {
+			return $version;
+		}
+
+		$version = '0';
+		$file    = dirname(__DIR__, 2) . '/install/version.php';
+		if (!is_file($file)) {
+			return $version;
+		}
+
+		$content = file_get_contents($file);
+		if (!is_string($content)) {
+			return $version;
+		}
+
+		if (preg_match("/['\\\"]VERSION['\\\"]\\s*=>\\s*['\\\"]([^'\\\"]+)['\\\"]/", $content, $matches) === 1) {
+			$normalized = trim((string)$matches[1]);
+			if ($normalized !== '') {
+				$version = $normalized;
+			}
+		}
+
+		return $version;
+	}
+
+	/**
+	 * @param float $startedAt
+	 *
+	 * @return float
+	 */
+	private static function toMilliseconds(float $startedAt): float
+	{
+		return round((microtime(true) - $startedAt) * 1000, 2);
 	}
 
 	/**

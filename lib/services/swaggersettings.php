@@ -5,15 +5,17 @@ namespace K4T\Docs\Services;
 final class SwaggerSettings
 {
 	private const DEFAULT_SETTINGS = [
-		'enabled'         => true,
-		'allowed_groups'  => [],
-		'allowed_ips'     => [],
-		'cache_enabled'   => true,
-		'cache_ttl'       => 3600,
-		'servers'         => [],
-		'include_dirs'    => [],
-		'exclude_dirs'    => [],
-		'include_modules' => [],
+		'enabled'               => true,
+		'allowed_groups'        => [],
+		'allowed_ips'           => [],
+		'cache_enabled'         => true,
+		'cache_ttl'             => 3600,
+		'cache_revision'        => '1',
+		'debug_headers_enabled' => false,
+		'servers'               => [],
+		'include_dirs'          => [],
+		'exclude_dirs'          => [],
+		'include_modules'       => [],
 	];
 
 	/**
@@ -25,6 +27,8 @@ final class SwaggerSettings
 	 *     allowed_ips:list<string>,
 	 *     cache_enabled:bool,
 	 *     cache_ttl:int,
+	 *     cache_revision:string,
+	 *     debug_headers_enabled:bool,
 	 *     servers:list<array{url:string, description:string|null}>,
 	 *     include_dirs:list<string>,
 	 *     exclude_dirs:list<string>,
@@ -47,11 +51,25 @@ final class SwaggerSettings
 			throw new \InvalidArgumentException('swagger_settings.cache_enabled must be a boolean');
 		}
 
+		if (!is_bool($settings['debug_headers_enabled'])) {
+			throw new \InvalidArgumentException('swagger_settings.debug_headers_enabled must be a boolean');
+		}
+
 		$cacheTtl = filter_var($settings['cache_ttl'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 		if ($cacheTtl === false) {
 			throw new \InvalidArgumentException('swagger_settings.cache_ttl must be an integer >= 0');
 		}
 		$settings['cache_ttl'] = $cacheTtl;
+
+		if (is_scalar($settings['cache_revision']) === false) {
+			throw new \InvalidArgumentException('swagger_settings.cache_revision must be a scalar');
+		}
+
+		$cacheRevision = trim((string)$settings['cache_revision']);
+		if ($cacheRevision === '') {
+			throw new \InvalidArgumentException('swagger_settings.cache_revision must be a non-empty string');
+		}
+		$settings['cache_revision'] = $cacheRevision;
 
 		$settings['include_dirs']    = self::normalizeStringList($settings['include_dirs'], 'include_dirs');
 		$settings['exclude_dirs']    = self::normalizeStringList($settings['exclude_dirs'], 'exclude_dirs');
