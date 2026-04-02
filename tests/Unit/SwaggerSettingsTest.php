@@ -15,8 +15,18 @@ class SwaggerSettingsTest extends
 		self::assertTrue($settings['enabled']);
 		self::assertTrue($settings['cache_enabled']);
 		self::assertSame(3600, $settings['cache_ttl']);
+		self::assertSame('1', $settings['cache_revision']);
+		self::assertFalse($settings['debug_headers_enabled']);
 		self::assertSame([], $settings['include_dirs']);
 		self::assertSame([], $settings['allowed_groups']);
+	}
+
+	public function testInvalidCacheRevisionThrows(): void
+	{
+		$this->expectException(\InvalidArgumentException::class);
+		SwaggerSettings::normalize([
+			'cache_revision' => '',
+		]);
 	}
 
 	public function testInvalidServersThrows(): void
